@@ -1,6 +1,6 @@
 """
-Metaclass implementation for automatic subset validation against superset.
-No more manual validate_subset_columns calls!
+Clean subset validation using base class pattern.
+Automatic validation of DataFrameModel subsets against superset schemas.
 """
 
 import polars as pl
@@ -66,7 +66,26 @@ class ValidatedSubsetMeta(MetaModel):
         )
 
 
-# Central repository - SUPERSET schema (source of truth)
+# ===========================================
+# VALIDATED SUBSET BASE CLASS
+# ===========================================
+
+
+class ValidatedSubset(DataFrameModel, metaclass=ValidatedSubsetMeta):
+    """
+    Base class for all subset models with automatic validation.
+    Inherit from this and specify superset in class definition.
+    """
+
+    class Config:
+        strict = "filter"
+
+
+# ===========================================
+# CENTRAL SUPERSET SCHEMAS
+# ===========================================
+
+
 class FullUserDataModel(DataFrameModel):
     user_id: int = pa.Field(ge=1)
     name: str
@@ -80,89 +99,74 @@ class FullUserDataModel(DataFrameModel):
         strict = "filter"
 
 
-# Subset models using metaclass - automatic validation!
-class ContactDataModel(
-    DataFrameModel, metaclass=ValidatedSubsetMeta, superset=FullUserDataModel
-):
+class FullProductDataModel(DataFrameModel):
+    product_id: int = pa.Field(ge=1)
+    name: str
+    price: float = pa.Field(ge=0)
+    category: str
+    in_stock: bool
+    created_at: str
+
+    class Config:
+        strict = "filter"
+
+
+# ===========================================
+# SUBSET MODEL DEFINITIONS
+# ===========================================
+
+
+class ContactDataModel(ValidatedSubset, superset=FullUserDataModel):
+    """Contact information subset - just the essentials for communication."""
+
     user_id: int = pa.Field(ge=1)
     name: str
     email: str
 
-    class Config:
-        strict = "filter"
 
+class FinanceDataModel(ValidatedSubset, superset=FullUserDataModel):
+    """Financial information subset - salary and department data."""
 
-class FinanceDataModel(
-    DataFrameModel, metaclass=ValidatedSubsetMeta, superset=FullUserDataModel
-):
     user_id: int = pa.Field(ge=1)
     salary: float = pa.Field(ge=0)
     department: str
 
-    class Config:
-        strict = "filter"
+
+class UserBasicsModel(ValidatedSubset, superset=FullUserDataModel):
+    """Basic user information subset - core demographic data."""
+
+    user_id: int = pa.Field(ge=1)
+    name: str
+    age: int = pa.Field(ge=0, le=120)
 
 
-# For comparison - the old manual approach (no longer needed!)
-def validate_subset_columns(
-    subset_model: type[DataFrameModel], superset_model: type[DataFrameModel]
-) -> bool:
-    """Manual validation (replaced by metaclass approach)."""
-    subset_columns = set(subset_model.__annotations__.keys())
-    superset_columns = set(superset_model.__annotations__.keys())
+class ProductSummaryModel(ValidatedSubset, superset=FullProductDataModel):
+    """Product summary subset - key product information."""
 
-    missing = subset_columns - superset_columns
-    if missing:
-        raise ValueError(
-            f"Subset {subset_model.__name__} declares columns not in superset {superset_model.__name__}: {missing}"
-        )
+    product_id: int = pa.Field(ge=1)
+    name: str
+    price: float = pa.Field(ge=0)
 
-    print(
-        f"✅ {subset_model.__name__} subset is valid against {superset_model.__name__}"
-    )
-    return True
+
+class ProductInventoryModel(ValidatedSubset, superset=FullProductDataModel):
+    """Product inventory subset - stock tracking information."""
+
+    product_id: int = pa.Field(ge=1)
+    name: str
+    in_stock: bool
 
 
 def main():
-    print("=== Metaclass-Based Automatic Validation Demo ===")
+    """Demonstrate the ValidatedSubset pattern with real data validation."""
+    print("=== ValidatedSubset Pattern Demonstration ===")
     print()
-
-    # Show superset columns
-    superset_columns = list(FullUserDataModel.__annotations__.keys())
-    print(f"Superset columns: {superset_columns}")
-    print()
-
-    print("=== Models Already Validated at Class Definition Time ===")
-    print("(You saw the validation messages when the classes were defined)")
-    print()
-
-    # Show that models are already validated
-    contact_columns = list(ContactDataModel.__annotations__.keys())
-    finance_columns = list(FinanceDataModel.__annotations__.keys())
-
-    print(f"ContactDataModel columns: {contact_columns}")
-    print(f"FinanceDataModel columns: {finance_columns}")
-    print()
-
-    # Demonstrate new helper methods added by metaclass
-    print("=== Helper Methods Added by Metaclass ===")
     print(
-        f"ContactDataModel.get_subset_columns(): {getattr(ContactDataModel, 'get_subset_columns')()}"
-    )
-    print(
-        f"ContactDataModel.get_superset_model(): {getattr(ContactDataModel, 'get_superset_model')().__name__}"
-    )
-    print(
-        f"FinanceDataModel.get_subset_columns(): {getattr(FinanceDataModel, 'get_subset_columns')()}"
-    )
-    print(
-        f"FinanceDataModel.get_superset_model(): {getattr(FinanceDataModel, 'get_superset_model')().__name__}"
+        "✅ All subset models validated against superset schemas at class definition time!"
     )
     print()
 
-    # Test with actual data
-    print("=== Testing with Real Data ===")
-    sample_data = {
+    # Create sample data that includes extra columns
+    sample_user_data = {
         "user_id": [1, 2, 3],
         "name": ["Alice", "Bob", "Charlie"],
         "email": ["alice@example.com", "bob@example.com", "charlie@example.com"],
@@ -173,46 +177,63 @@ def main():
         "extra_column": ["will", "be", "filtered"],
     }
 
-    df = pl.DataFrame(sample_data)
-    print(f"Original data columns: {df.columns}")
-    print(f"Original shape: {df.shape}")
+    sample_product_data = {
+        "product_id": [101, 102, 103],
+        "name": ["Widget A", "Gadget B", "Tool C"],
+        "price": [19.99, 29.99, 39.99],
+        "category": ["Tools", "Electronics", "Hardware"],
+        "in_stock": [True, False, True],
+        "created_at": ["2024-01-01", "2024-01-02", "2024-01-03"],
+        "extra_product_column": ["will", "be", "filtered"],
+    }
+
+    user_df = pl.DataFrame(sample_user_data)
+    product_df = pl.DataFrame(sample_product_data)
+
+    print(f"Original user data: {user_df.columns} (shape: {user_df.shape})")
+    print(f"Original product data: {product_df.columns} (shape: {product_df.shape})")
     print()
 
-    # Test subset models
-    contact_result = ContactDataModel.validate(df)
-    print(f"Contact subset result: {contact_result.columns}")
-    print(f"Contact shape: {contact_result.shape}")
-    print(contact_result)
+    # Test user subset models
+    print("=== User Data Subsets ===")
+    contact_result = ContactDataModel.validate(user_df)
+    print(f"ContactDataModel: {contact_result.columns}")
+
+    finance_result = FinanceDataModel.validate(user_df)
+    print(f"FinanceDataModel: {finance_result.columns}")
+
+    basics_result = UserBasicsModel.validate(user_df)
+    print(f"UserBasicsModel: {basics_result.columns}")
     print()
 
-    finance_result = FinanceDataModel.validate(df)
-    print(f"Finance subset result: {finance_result.columns}")
-    print(f"Finance shape: {finance_result.shape}")
-    print(finance_result)
+    # Test product subset models
+    print("=== Product Data Subsets ===")
+    summary_result = ProductSummaryModel.validate(product_df)
+    print(f"ProductSummaryModel: {summary_result.columns}")
+
+    inventory_result = ProductInventoryModel.validate(product_df)
+    print(f"ProductInventoryModel: {inventory_result.columns}")
     print()
 
-    # Demonstrate runtime error for invalid subset
-    print("=== Attempting to Create Invalid Subset Model ===")
-    print("This will fail at class definition time...")
+    print("=== Pattern Benefits ===")
+    print("✅ Succinct syntax: class MyModel(ValidatedSubset, superset=ParentModel)")
+    print("✅ Automatic validation at class definition time")
+    print("✅ Clear inheritance relationship")
+    print("✅ IDE autocompletion and type checking support")
+    print("✅ Built-in helper methods for introspection")
+    print()
 
-    try:
-        # This will fail immediately when the class is defined!
-        class InvalidSubsetModel(
-            DataFrameModel, metaclass=ValidatedSubsetMeta, superset=FullUserDataModel
-        ):
-            user_id: int = pa.Field(ge=1)
-            name: str
-            email: str
-            non_existent_column: str  # ⚠️ This doesn't exist in superset!
-
-            class Config:
-                strict = "filter"
-
-        print("❌ This line should never be reached!")
-
-    except ValueError as e:
-        print("Caught validation error at class definition time:")
-        print(f"{e}")
+    # Demonstrate helper methods
+    print("=== Built-in Helper Methods ===")
+    print(
+        f"ContactDataModel.get_subset_columns(): {ContactDataModel.get_subset_columns()}"
+    )  # type: ignore
+    print(
+        f"ContactDataModel.get_superset_model(): {ContactDataModel.get_superset_model().__name__}"
+    )  # type: ignore
+    print(
+        f"ProductSummaryModel.get_subset_columns(): {ProductSummaryModel.get_subset_columns()}"
+    )  # type: ignore
 
 
 if __name__ == "__main__":
