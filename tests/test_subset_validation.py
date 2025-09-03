@@ -152,10 +152,7 @@ class TestPatternBehavior:
         assert ProductSummaryModel.__superset_model__ == FullProductDataModel  # type: ignore
 
         # They should be different
-        assert (
-            ContactDataModel.__superset_model__
-            != ProductSummaryModel.__superset_model__
-        )  # type: ignore
+        assert ContactDataModel.__superset_model__ != ProductSummaryModel.__superset_model__  # type: ignore
 
     def test_config_inheritance(self):
         """Test that Config is properly inherited."""
