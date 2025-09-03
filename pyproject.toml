@@ -1,8 +1,9 @@
 [project]
 name = "subset"
 version = "0.1.0"
-description = "Add your description here"
+description = "Automatic validation of DataFrameModel subsets against superset schemas using Pandera and Polars"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.13"
 dependencies = [
     "pandera[polars]>=0.26.1",
