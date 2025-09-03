@@ -32,14 +32,6 @@ class ValidatedSubsetMeta(MetaModel):
             # Store the superset reference for later use
             new_class.__superset_model__ = superset_model
 
-            # Add a helpful method to check what columns this subset uses
-            new_class.get_subset_columns = classmethod(
-                lambda cls: list(cls.__annotations__.keys())
-            )
-            new_class.get_superset_model = classmethod(
-                lambda cls: cls.__superset_model__
-            )
-
         return new_class
 
     @staticmethod
@@ -220,20 +212,6 @@ def main():
     print("✅ Automatic validation at class definition time")
     print("✅ Clear inheritance relationship")
     print("✅ IDE autocompletion and type checking support")
-    print("✅ Built-in helper methods for introspection")
-    print()
-
-    # Demonstrate helper methods
-    print("=== Built-in Helper Methods ===")
-    print(
-        f"ContactDataModel.get_subset_columns(): {ContactDataModel.get_subset_columns()}"
-    )  # type: ignore
-    print(
-        f"ContactDataModel.get_superset_model(): {ContactDataModel.get_superset_model().__name__}"
-    )  # type: ignore
-    print(
-        f"ProductSummaryModel.get_subset_columns(): {ProductSummaryModel.get_subset_columns()}"
-    )  # type: ignore
 
 
 if __name__ == "__main__":
