@@ -2,9 +2,9 @@
 
 ## Project Overview
 
-This is a Python project called "subset" using modern Python 3.13+ with **uv** as the package manager and dependency resolver. The project focuses on data validation using **Pandera with Polars** backend for high-performance data processing.
+This is a Python project called "subset" - a production-ready library for automatic subset validation using **metaclass-based superset validation**. Subset DataFrameModels are automatically validated against central superset schemas at class definition time.
 
-**Key Innovation**: Implements automatic subset validation using **metaclass-based superset validation** - subset DataFrameModels are automatically validated against a central superset schema at class definition time.
+**Built with modern Python 3.13+ using uv package manager and Pandera with Polars backend for high-performance data validation.**
 
 ## Key Technologies & Architecture
 
@@ -12,35 +12,59 @@ This is a Python project called "subset" using modern Python 3.13+ with **uv** a
 - **Data Framework**: Pandera with Polars backend for schema validation and data processing
 - **Python Version**: 3.13+ (strict requirement in `pyproject.toml`)
 - **Virtual Environment**: `.venv` managed by uv
-- **Static Analysis**: `ty` for advanced type checking, `ruff` for linting/formatting
+- **Static Analysis**: `ty` for type checking, `ruff` for linting/formatting
+- **Testing**: `pytest` with comprehensive test suite
+- **Build System**: `Makefile` for standardized development workflow
+
+## Project Structure
+
+```
+/Users/arek/code/subset/
+├── subset.py          # Core library module (ValidatedSubsetMeta, ValidatedSubset)
+├── main.py           # Demo/example usage
+├── tests/            # Comprehensive test suite
+│   ├── test_subset_validation.py  # 12 test cases
+│   └── schemas.py    # Example superset/subset models
+├── Makefile          # Development workflow commands
+├── pyproject.toml    # Project configuration
+├── uv.lock          # Locked dependencies
+└── README.md        # Project documentation
+```
 
 ## Development Workflow
 
-### Environment Setup
+### Standard Commands (use these exclusively)
 
 ```bash
-# Use uv for all package operations, not pip
+make dev      # Install dependencies and setup environment
+make test     # Run all tests with pytest
+make lint     # Run ruff linting
+make format   # Auto-format code with ruff
+make typecheck # Run static type checking with ty
+make quality  # Run all quality checks (test + lint + typecheck)
+make clean    # Remove build artifacts and cache
+```
+
+### Individual Tools (if needed)
+
+```bash
 uv sync                    # Install dependencies from uv.lock
 uv add <package>          # Add new dependencies
 uv remove <package>       # Remove dependencies
-uv run python main.py     # Run the application
+uv run python main.py     # Run demo
 ```
 
-### Project Structure Patterns
+## Core Library: `subset.py`
 
-- **Single module approach**: Currently using `main.py` as entry point
-- **Minimal dependencies**: Only essential packages (pandera[polars])
-- **Modern Python**: Leveraging Python 3.13 features and type hints
+### ValidatedSubsetMeta Metaclass
 
-## Metaclass-Based Subset Validation Pattern
-
-This project implements a novel approach for **automatic validation of subset schemas against superset schemas**:
-
-### Core Pattern
+Automatically validates subset columns against superset models at class definition time:
 
 ```python
-# 1. Define central superset schema
-class FullUserDataModel(DataFrameModel):
+from subset import ValidatedSubset
+
+# Define superset model
+class FullUserDataModel(ValidatedSubset):
     user_id: int = pa.Field(ge=1)
     name: str
     email: str
@@ -49,60 +73,62 @@ class FullUserDataModel(DataFrameModel):
     department: str
     created_at: str
 
-    class Config:
-        strict = "filter"  # Auto-removes extra columns
-
-# 2. Define subset models with automatic validation
-class ContactDataModel(DataFrameModel, metaclass=ValidatedSubsetMeta, superset=FullUserDataModel):
+# Define subset - automatically validated at class definition
+class ContactDataModel(ValidatedSubset, superset=FullUserDataModel):
     user_id: int = pa.Field(ge=1)
     name: str
     email: str
-
-    class Config:
-        strict = "filter"
+    # Missing columns will raise ValidationError immediately
 ```
 
-### Key Benefits
+### Key Features
 
-- **Automatic validation**: Subset columns validated against superset at class definition time
-- **No manual calls**: No need to call `validate_subset_columns()` manually
-- **Immediate feedback**: Invalid subsets fail fast during import/definition
-- **Pandera integration**: Full compatibility with Pandera's validation and `strict='filter'`
-- **Helper methods**: Auto-generated `get_subset_columns()` and `get_superset_model()` methods
+- **Automatic validation**: Subset columns validated against superset at import time
+- **Immediate feedback**: Invalid subsets fail fast during class definition
+- **Helper methods**: Auto-generated `get_subset_columns()` and `get_superset_model()`
+- **Full Pandera compatibility**: Works with all Pandera validation features
+- **Clean syntax**: Simple inheritance pattern with `superset=` parameter
 
-### Usage Rules
+## Testing Architecture
 
-- Subset models MUST use `metaclass=ValidatedSubsetMeta, superset=SupersetModel`
-- All subset columns must exist in the specified superset model
-- Use `strict='filter'` in Config to automatically remove extra columns from DataFrames
+**Location**: `tests/` directory with 12 comprehensive test cases
+
+**Test Coverage**:
+
+- Metaclass validation behavior
+- Superset/subset column validation
+- Error handling for invalid subsets
+- Helper method functionality
+- Data validation integration
+- Example schema patterns
+
+**Run Tests**: `make test` (uses pytest via uv)
+
+## Code Quality Standards
+
+- **Type hints**: Required for all new code (enforced by ty)
+- **Code style**: Enforced by ruff (auto-formatting available)
+- **Test coverage**: All features must have corresponding tests
+- **Documentation**: Docstrings for public APIs
 
 ## Development Conventions
 
-- **Entry point**: Use `main.py` with `if __name__ == "__main__":` pattern
-- **Dependencies**: Always update `pyproject.toml` and run `uv sync`
-- **Python version**: Code must be compatible with Python 3.13+
-- **Type hints**: Expected for all new code (modern Python practices)
+- **Main library**: Keep `subset.py` minimal and focused on core functionality
+- **Examples**: Use `main.py` for demonstrations and usage examples
+- **Tests**: Add to `tests/` directory with descriptive test names
+- **Dependencies**: Always use `uv add` and commit `uv.lock` changes
+- **Quality**: Run `make quality` before committing changes
 
-## Build & Run Commands
+## Common Development Tasks
 
-```bash
-uv run python main.py     # Run demonstration of metaclass validation pattern
-uv run ty check main.py   # Static type checking with ty
-uv run ruff check main.py # Lint checking with ruff
-uv run ruff format main.py # Code formatting with ruff
-uv sync                   # Update dependencies from lock file
-uv lock                   # Regenerate lock file after dependency changes
-```
+- **Add new feature**: Implement in `subset.py`, add tests in `tests/`, run `make quality`
+- **Add example**: Extend `main.py` or `tests/schemas.py` with new model examples
+- **Debug validation**: Check `tests/test_subset_validation.py` for validation patterns
+- **Performance testing**: Use Polars DataFrames for large dataset validation
 
 ## Important Notes
 
 - **Never use pip** - this project uses uv exclusively
-- **No test suite yet** - consider adding pytest with `uv add pytest --dev`
-- **Empty README** - project documentation needs development
-- **Git ignores**: Standard Python patterns plus `.venv` exclusion
-
-## Common Tasks
-
-- Adding data processing: Extend with Polars DataFrames and Pandera schemas
-- Testing: Set up with `uv add pytest --dev` and create `tests/` directory
-- Documentation: Populate `README.md` with project purpose and usage examples
+- **Always run quality checks** - `make quality` before any commits
+- **Type checking**: Some dynamic attributes use `# type: ignore` comments (expected)
+- **Polars backend**: Automatic via pandera[polars] dependency for performance
