@@ -5,7 +5,7 @@ Central superset schemas and example subset models.
 
 import pandera as pa
 from pandera.polars import DataFrameModel
-from main import ValidatedSubset
+from subset import ValidatedSubset
 
 
 # ===========================================

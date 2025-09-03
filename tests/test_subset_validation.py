@@ -5,7 +5,7 @@ Comprehensive tests for subset validation functionality.
 
 import pytest
 import polars as pl
-from main import ValidatedSubset
+from subset import ValidatedSubset
 import pandera as pa
 from tests.schemas import (
     FullUserDataModel,
