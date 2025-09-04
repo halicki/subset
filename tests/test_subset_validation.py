@@ -40,6 +40,14 @@ class TestValidatedSubsetMeta:
                 user_id: int = pa.Field(ge=1)
                 invalid_column: str  # This column doesn't exist in superset
 
+    def test_type_mismatch_raises_error(self):
+        """Test that type mismatches raise TypeError."""
+        with pytest.raises(TypeError, match="has type mismatches with superset"):
+
+            class TypeMismatchModel(ValidatedSubset, superset=FullUserDataModel):
+                user_id: str  # Wrong type - should be int
+                name: str
+
     def test_subset_without_superset_works(self):
         """Test that models without superset specified work normally."""
 
@@ -48,6 +56,62 @@ class TestValidatedSubsetMeta:
 
         # Should not have superset reference
         assert not hasattr(RegularModel, "__superset_model__")
+
+    def test_empty_subset_model_works(self):
+        """Test that subset model with no annotations works."""
+
+        class EmptySubsetModel(ValidatedSubset, superset=FullUserDataModel):
+            pass  # No annotations
+
+        # Should not raise an error and should have superset reference
+        assert hasattr(EmptySubsetModel, "__superset_model__")
+        assert EmptySubsetModel.__superset_model__ == FullUserDataModel  # type: ignore
+
+    def test_multiple_missing_columns_error(self):
+        """Test error message when multiple columns are missing."""
+        with pytest.raises(ValueError) as exc_info:
+
+            class MultipleMissingModel(ValidatedSubset, superset=FullUserDataModel):
+                user_id: int = pa.Field(ge=1)
+                missing_col1: str
+                missing_col2: int
+
+        error_msg = str(exc_info.value)
+        assert "missing_col1" in error_msg
+        assert "missing_col2" in error_msg
+        assert "Missing columns:" in error_msg
+
+    def test_multiple_type_mismatches_error(self):
+        """Test error message when multiple types are mismatched."""
+        with pytest.raises(TypeError) as exc_info:
+
+            class MultipleTypeMismatchModel(
+                ValidatedSubset, superset=FullUserDataModel
+            ):
+                user_id: str  # Should be int
+                age: str  # Should be int
+                name: str  # This one is correct
+
+        error_msg = str(exc_info.value)
+        assert "user_id" in error_msg
+        assert "age" in error_msg
+        assert "subset has str, superset has int" in error_msg
+
+    def test_complex_type_annotations(self):
+        """Test that complex type annotations are handled correctly."""
+        from typing import Optional
+
+        # This should work - same complex types
+        class ComplexValidModel(ValidatedSubset, superset=FullUserDataModel):
+            user_id: int = pa.Field(ge=1)
+            name: str
+
+        # This should fail - different complex types
+        with pytest.raises(TypeError):
+
+            class ComplexInvalidModel(ValidatedSubset, superset=FullUserDataModel):
+                user_id: Optional[int]  # Different from superset's int
+                name: str
 
 
 class TestSubsetValidation:
@@ -135,6 +199,47 @@ class TestSubsetValidation:
         with pytest.raises(Exception):  # Pandera will raise its own validation error
             ContactDataModel.validate(df)
 
+    def test_field_validation_inheritance(self, sample_user_data):
+        """Test that Pandera Field validations are properly inherited."""
+        # Create data with invalid values
+        invalid_data = sample_user_data.copy()
+        invalid_data["user_id"] = [-1, 0, -5]  # Invalid: should be >= 1
+
+        df = pl.DataFrame(invalid_data)
+
+        # Should raise Pandera validation error for Field constraints
+        with pytest.raises(Exception):  # Pandera field validation error
+            ContactDataModel.validate(df)
+
+    def test_strict_filter_behavior(self, sample_user_data):
+        """Test that strict='filter' removes extra columns correctly."""
+        df = pl.DataFrame(sample_user_data)
+        result = ContactDataModel.validate(df)
+
+        # Should only contain subset columns, extra columns filtered out
+        assert len(result.columns) == 3
+        assert "extra_column" not in result.columns
+        assert "created_at" not in result.columns  # Not in ContactDataModel
+
+        # But should contain all subset columns
+        expected = {"user_id", "name", "email"}
+        actual = set(result.columns)
+        assert actual == expected
+
+    def test_data_values_preserved(self, sample_user_data):
+        """Test that data values are preserved during validation."""
+        df = pl.DataFrame(sample_user_data)
+        result = ContactDataModel.validate(df)
+
+        # Check that actual data values are preserved
+        assert result["user_id"].to_list() == [1, 2, 3]
+        assert result["name"].to_list() == ["Alice", "Bob", "Charlie"]
+        assert result["email"].to_list() == [
+            "alice@example.com",
+            "bob@example.com",
+            "charlie@example.com",
+        ]
+
 
 class TestPatternBehavior:
     """Test the overall behavior of the ValidatedSubset pattern."""
@@ -161,3 +266,31 @@ class TestPatternBehavior:
         # All models should have strict="filter" configuration
         assert ContactDataModel.Config.strict == "filter"
         assert ProductSummaryModel.Config.strict == "filter"
+
+    def test_superset_model_storage(self):
+        """Test that superset model reference is stored correctly."""
+        # Test that the stored superset model is the actual class, not a copy
+        assert ContactDataModel.__superset_model__ is FullUserDataModel  # type: ignore
+        assert ProductSummaryModel.__superset_model__ is FullProductDataModel  # type: ignore
+
+    def test_inheritance_from_pandera_dataframe_model(self):
+        """Test that subset models properly inherit from DataFrameModel."""
+        # Should have all the DataFrameModel methods
+        assert hasattr(ContactDataModel, "validate")
+        assert hasattr(ContactDataModel, "Config")
+
+        # Should be instance of DataFrameModel metaclass
+        assert isinstance(ContactDataModel, type)
+
+    def test_metaclass_applied_correctly(self):
+        """Test that ValidatedSubsetMeta is properly applied."""
+        # The metaclass should be ValidatedSubsetMeta
+        from subset import ValidatedSubsetMeta
+
+        assert type(ContactDataModel) is ValidatedSubsetMeta
+
+        # But regular models without superset should also work
+        class RegularModel(ValidatedSubset):
+            some_field: str
+
+        assert type(RegularModel) is ValidatedSubsetMeta

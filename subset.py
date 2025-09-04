@@ -34,19 +34,44 @@ class ValidatedSubsetMeta(MetaModel):
     def _validate_against_superset(
         subset_class: Type, superset_model: Type[DataFrameModel], subset_name: str
     ):
-        """Validate that subset columns exist in superset."""
-        if not hasattr(subset_class, "__annotations__"):
-            return  # No annotations to validate
+        """Validate that subset columns exist in superset with compatible types."""
+        subset_annotations = getattr(subset_class, "__annotations__", {})
+        superset_annotations = getattr(superset_model, "__annotations__", {})
 
-        subset_columns = set(subset_class.__annotations__.keys())
-        superset_columns = set(superset_model.__annotations__.keys())
+        if not subset_annotations:
+            return  # No columns to validate
 
-        missing = subset_columns - superset_columns
-        if missing:
+        subset_columns = set(subset_annotations.keys())
+        superset_columns = set(superset_annotations.keys())
+
+        # Check for missing columns
+        missing_columns = subset_columns - superset_columns
+        if missing_columns:
             raise ValueError(
-                f"❌ Subset model '{subset_name}' declares columns not in superset '{superset_model.__name__}': {missing}\n"
-                f"   Available superset columns: {sorted(superset_columns)}\n"
-                f"   Subset tried to use: {sorted(subset_columns)}"
+                f"❌ Subset model '{subset_name}' declares columns not in superset '{superset_model.__name__}':\n"
+                f"   Missing columns: {sorted(missing_columns)}\n"
+                f"   Available superset columns: {sorted(superset_columns)}"
+            )
+
+        # Check for type compatibility
+        type_mismatches = []
+        for column_name in subset_columns:
+            subset_type = subset_annotations[column_name]
+            superset_type = superset_annotations[column_name]
+
+            if subset_type != superset_type:
+                subset_type_name = getattr(subset_type, "__name__", str(subset_type))
+                superset_type_name = getattr(
+                    superset_type, "__name__", str(superset_type)
+                )
+                type_mismatches.append(
+                    f"   • {column_name}: subset has {subset_type_name}, superset has {superset_type_name}"
+                )
+
+        if type_mismatches:
+            raise TypeError(
+                f"❌ Subset model '{subset_name}' has type mismatches with superset '{superset_model.__name__}':\n"
+                + "\n".join(type_mismatches)
             )
 
 
